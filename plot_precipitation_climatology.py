@@ -53,6 +53,38 @@ def create_plot(clim, model, season, gridlines=False, levels=None):
     plt.title(title)
 
 
+# def apply_mask(clim, SFTLF_FILE, REALM):
+#     dset = xr.open_dataset(SFTLF_FILE)
+#     sftlf = dset['sftlf']
+#     if REALM == "ocean":
+#         return clim.where(sftlf.data > 50)
+#     elif REALM == "land":
+#         return clim.where(sftlf.data < 50)
+#     else:
+#         sys.exit("REALM must be either 'land' or 'ocean'")
+
+def apply_mask(darray, sftlf_file, realm):
+    """Mask ocean or land using a sftlf (land surface fraction) file.
+    
+    Args:
+        darray (xarray.DataArray): Data to mask
+        sftlf_file (str): Land surface fraction file
+        realm (str): Realm to mask
+    
+    """
+    
+    dset = xr.open_dataset(sftlf_file)
+    
+    if realm == 'land':
+        masked_darray = darray.where(dset['sftlf'].data < 50)
+    elif realm == "ocean":
+        masked_darray = darray.where(dset['sftlf'].data > 50)
+    else:
+        sys.exit("REALM must be either 'land' or 'ocean'")
+    
+    return masked_darray
+    
+    
 def main(inargs):
     """Run the program."""
 
@@ -60,6 +92,12 @@ def main(inargs):
     
     clim = dset['pr'].groupby('time.season').mean('time', keep_attrs=True)
     clim = convert_pr_units(clim)
+
+#   clim = apply_mask(clim, inargs.mask[0], inargs.mask[1])
+    
+    if inargs.mask:
+        sftlf_file, realm = inargs.mask
+        clim = apply_mask(clim, sftlf_file, realm)
 
     create_plot(clim, dset.attrs['source_id'], inargs.season,
                 gridlines=inargs.gridlines, levels=inargs.cbar_levels)
@@ -71,13 +109,14 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=description)
    
     parser.add_argument("pr_file", type=str, help="Precipitation data file")
-    parser.add_argument("season", type=str, help="Season to plot")
+    parser.add_argument("season", type=str, choices=['DJF', 'MAM', 'JJA', 'SON'], help="Season to plot")
     parser.add_argument("output_file", type=str, help="Output file name")
 
     parser.add_argument("--gridlines", action="store_true", default=False,
                         help="Include gridlines on the plot")
     parser.add_argument("--cbar_levels", type=float, nargs='*', default=None,
                         help='list of levels / tick marks to appear on the colorbar')
+    parser.add_argument("--mask", type=str, nargs=2, metavar=('SFTLF_FILE', 'REALM'), default=None, help="""Provide sftlf file and realm to mask ('land' or 'ocean')""")
 
     args = parser.parse_args()
    
