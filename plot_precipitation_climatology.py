@@ -1,11 +1,13 @@
 import logging
 import argparse
+import pdb
 
 import xarray as xr
 import cartopy.crs as ccrs
 import matplotlib.pyplot as plt
 import numpy as np
 import cmocean
+import cmdline_provenance as cmdprov
 
 
 def convert_pr_units(darray):
@@ -78,6 +80,32 @@ def create_plot(clim, model, season, gridlines=False, levels=None):
     title = f'{model} precipitation climatology ({season})'
     plt.title(title)
 
+    
+def get_log_and_key(pr_file, history_attr, plot_type):
+    """Get key and command line log for image metadata.
+    
+    Different image formats allow different metadata keys.
+    
+    Args:
+        pr_file (str): Input precipitation file
+        history_attr (str): History attribute from pr_file
+        plot_type (str): File format for output image
+    
+    """
+    
+    valid_keys = {'png': 'History',
+                  'pdf': 'Title',
+                  'eps': 'Creator',
+                  'ps' : 'Creator'}
+    
+    if plot_type in valid_keys.keys():
+        log_key = valid_keys[plot_type]
+    else:
+        raise ValueError(f"Image format not one of: {*[*valid_keys],}")
+    new_log = cmdprov.new_log(infile_logs={pr_file: history_attr})
+    
+    return log_key, new_log    
+    
 
 def main(inargs):
     """Run the program."""
@@ -105,10 +133,20 @@ def main(inargs):
     if inargs.mask:
         sftlf_file, realm = inargs.mask
         clim = apply_mask(clim, sftlf_file, realm)
-
+        
     create_plot(clim, dset.attrs['source_id'], inargs.season,
                 gridlines=inargs.gridlines, levels=inargs.cbar_levels)
-    plt.savefig(inargs.output_file, dpi=200)
+    image_format = inargs.output_file.split('.')[-1]
+    
+#     if image_format != 'png':
+#         raise ValueError('Output file must have the PNG image file extension .png')
+#     new_log = cmdprov.new_log(infile_logs = {inargs.pr_file : dset.attrs['history']})
+#     new_log = new_log.replace('\n', '  END  ')
+    
+    log_key, new_log = get_log_and_key(inargs.pr_file,
+                                   dset.attrs['history'],
+                                   inargs.output_file.split('.')[-1])
+    plt.savefig(inargs.output_file, metadata={log_key: new_log}, dpi=200)
 
 
 if __name__ == '__main__':
